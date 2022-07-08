@@ -26,8 +26,25 @@ class MisAccountAnalyticLine(models.Model):
     state = fields.Selection(
         [("draft", "Unposted"), ("posted", "Posted")], string="Status"
     )
+    line_type = fields.Selection(
+        [("forecast_line", "Forecast Line"), ("move_line", "Journal Item")], string="Line Type"
+    )
+    account_internal_type = fields.Selection(
+        related="account_id.user_type_id.type",
+    )
+    full_reconcile_id = fields.Many2one(
+        "account.full.reconcile",
+        string="Matching Number",
+        readonly=True,
+        index=True,
+    )
 
     def init(self):
+        expense_account_id = (
+            self.env["ir.config_parameter"]
+            .sudo()
+            .get_param("timesheet_expense_account")
+        )
         tools.drop_view_if_exists(self._cr, "mis_account_analytic_line")
         self._cr.execute(
             """
