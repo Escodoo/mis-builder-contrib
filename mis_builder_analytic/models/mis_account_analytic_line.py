@@ -14,7 +14,7 @@ class MisAccountAnalyticLine(models.Model):
         string="Analytic entry", comodel_name="account.analytic.line"
     )
     account_id = fields.Many2one(
-        string="Account", comodel_name="account.analytic.account"
+        string="Account", comodel_name="account.account"
     )
     company_id = fields.Many2one(string="Company", comodel_name="res.company")
     balance = fields.Float(string="Balance")
@@ -23,20 +23,35 @@ class MisAccountAnalyticLine(models.Model):
     state = fields.Selection(
         [("draft", "Unposted"), ("posted", "Posted")], string="Status"
     )
+    analytic_account_id = fields.Many2one(
+        string="Analytic Account", comodel_name="account.analytic.account"
+    )
+    analytic_tag_ids = fields.Many2many('account.analytic.tag', string='Tags')
 
     @api.model_cr
     def init(self):
+        expense_account_id = (
+            self.env["ir.config_parameter"]
+            .sudo()
+            .get_param("epa_timesheet_expense_account")
+        )
         tools.drop_view_if_exists(self._cr, "mis_account_analytic_line")
-        self._cr.execute(
+        self._cr.execute((
             """
             CREATE OR REPLACE VIEW mis_account_analytic_line AS (
                 SELECT
                     aal.id AS id,
+                    'move_line' as line_type,
                     aal.id AS analytic_line_id,
                     aal.date as date,
-                    aal.account_id as account_id,
+                    CASE
+                      WHEN aal.general_account_id is NULL THEN %s
+                      ELSE aal.general_account_id
+                    END as account_id,
+                    aal.account_id as analytic_account_id,
                     aal.company_id as company_id,
                     'posted'::VARCHAR as state,
+                    False as full_reconcile_id,
                     CASE
                       WHEN aal.amount >= 0.0 THEN aal.amount
                       ELSE 0.0
@@ -49,4 +64,5 @@ class MisAccountAnalyticLine(models.Model):
                 FROM
                     account_analytic_line aal
             )"""
-        )
+        ) % expense_account_id)
+
